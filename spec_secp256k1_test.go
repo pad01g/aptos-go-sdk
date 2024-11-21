@@ -1,10 +1,14 @@
 package aptos
 
 import (
+	"encoding/hex"
+	"testing"
+
 	"github.com/aptos-labs/aptos-go-sdk/bcs"
 	"github.com/aptos-labs/aptos-go-sdk/crypto"
+	"github.com/aptos-labs/aptos-go-sdk/internal/util"
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 /**
@@ -321,4 +325,78 @@ func Test_Spec_Secp256k1_Signing(t *testing.T) {
 	// It must be able to not-verify a message with the wrong signature
 	assert.False(t, pubkey1.Verify(message2, signature1), "It must be able to not-verify a message with the wrong signature")
 	assert.False(t, pubkey2.Verify(message2, signature2), "It must be able to not-verify a message with the wrong signature")
+}
+
+func Test_Spec_Secp256k1_Signing_2(t *testing.T) {
+	signer2, err := NewSecp256k1Account()
+	key2 := signer2.Signer
+	address2 := signer2.AccountAddress()
+
+	// It must be able to sign messages
+	message := parseHex(TestSecp256k1Message)
+
+	// It must have different signatures for different keys
+	signature2, err := key2.SignMessage(message)
+
+	key2Bytes := key2.PubKey().Bytes()
+	t.Logf("key2Bytes hexString: %v", hex.EncodeToString(key2Bytes))
+	t.Logf("key2Bytes len: %v", len(key2Bytes))
+
+	assert.NoError(t, err)
+	hexString2 := hex.EncodeToString(signature2.Bytes())
+	t.Logf("signature2 hexString: %v", hexString2)
+	t.Logf("signature2 len: %v", len(signature2.Bytes()))
+
+	signature2Skipped := signature2.Bytes()[2:]
+
+	byteArray0 := []byte{0x00}
+	byteArray1 := []byte{0x01}
+
+	sigBytes0 := append(append([]byte{}, signature2Skipped...), byteArray0...)
+	sigBytes1 := append(append([]byte{}, signature2Skipped...), byteArray1...)
+
+	t.Logf("sigBytes0 len: %v", len(sigBytes0))
+	t.Logf("sigBytes0: %v", hex.EncodeToString(sigBytes0))
+	t.Logf("sigBytes1 len: %v", len(sigBytes1))
+	t.Logf("sigBytes1: %v", hex.EncodeToString(sigBytes1))
+
+	t.Logf("message len: %v", len(message))
+	t.Logf("message: %v", hex.EncodeToString(message))
+	messageHash := util.Sha3256Hash([][]byte{message})
+	t.Logf("messageHash len: %v", len(messageHash))
+	t.Logf("messageHash: %v", hex.EncodeToString(messageHash))
+
+	recovered0, err := ethCrypto.Ecrecover(messageHash, sigBytes0)
+	recovered1, err := ethCrypto.Ecrecover(messageHash, sigBytes1)
+	t.Logf("recovered0 len: %v", len(recovered0))
+	t.Logf("recovered0: %v", hex.EncodeToString(recovered0))
+	t.Logf("recovered1 len: %v", len(recovered1))
+	t.Logf("recovered1: %v", hex.EncodeToString(recovered1))
+
+	recoveredPk0 := append(append([]byte{}, []byte{0x01, 0x41}...), recovered0...)
+	recoveredPk1 := append(append([]byte{}, []byte{0x01, 0x41}...), recovered1...)
+
+	t.Logf("recoveredPk0 len: %v", len(recoveredPk0))
+	t.Logf("recoveredPk0: %v", hex.EncodeToString(recoveredPk0))
+	t.Logf("recoveredPk1 len: %v", len(recoveredPk1))
+	t.Logf("recoveredPk1: %v", hex.EncodeToString(recoveredPk1))
+
+	authKeyFromString0 := &crypto.AuthenticationKey{}
+	authKeyFromString0.FromBytesAndScheme(recoveredPk0, crypto.SingleKeyScheme)
+	accountAddress0 := AccountAddress{}
+	accountAddress0.FromAuthKey(authKeyFromString0)
+	aa0 := accountAddress0.String()
+	t.Logf("aa0: %v", aa0)
+
+	authKeyFromString1 := &crypto.AuthenticationKey{}
+	authKeyFromString1.FromBytesAndScheme(recoveredPk1, crypto.SingleKeyScheme)
+	accountAddress1 := AccountAddress{}
+	accountAddress1.FromAuthKey(authKeyFromString1)
+	aa1 := accountAddress1.String()
+	t.Logf("aa1: %v", aa1)
+
+	aa2 := address2.String()
+	t.Logf("aa2: %v", aa2)
+
+	t.Logf("match any: %v", aa0 == aa2 || aa1 == aa2)
 }
